@@ -18,10 +18,24 @@
       "required": true
     },
     {
+      "name": "KEYCLOAK_PASSWORD",
+      "displayName": "Keycloak Admin Password",
+      "description": "This is the password for the admin user of the keycloak application.",
+      "value": "password",
+      "required": true
+    },
+    {
+      "name": "KEYCLOAK_USER",
+      "displayName": "Keycloak Admin Username",
+      "description": "This is the username for the admin user of the keycloak application.",
+      "value": "password",
+      "required": true
+    },
+    {
       "name": "NAMESPACE",
       "displayName": "Namespace",
-      "description": "The OpenShift Namespace where the ImageStream resides.",
-      "value": "openshift"
+      "description": "The OpenShift Namespace where the ImageStream resides.  This will usually be your project name",
+      "required": true
     },
     {
       "name": "DATABASE_SERVICE_NAME",
@@ -94,7 +108,7 @@
   "apiVersion": "v1",
   "metadata": {
     "name": "keycloak-openshift-fixed",
-    "namespace": "openshift"
+    "namespace": "${NAMESPACE}"
   }
       },
     {
@@ -104,6 +118,9 @@
         "name": "keycloak-openshift-fixed"
       },
       "spec": {
+        "triggers": [
+            {"type":"ConfigChange"}
+        ],
         "source": {
           "type": "Git",
           "git": {
@@ -111,14 +128,14 @@
             "ref": "master"
           },
           "contextDir": "server-postgres",
-          "dockerfile": "FROM jboss/keycloak-postgres:latest\nUSER root\nRUN mkdir -p /opt/jboss/keycloak/standalone/log\nRUN mkdir -p /opt/jboss/keycloak/standalone/data\nRUN chown -R jboss:0 /opt/jboss/keycloak/standalone\n RUN chmod -R g+rw /opt/jboss/keycloak/standalone\nUSER jboss\n"
+          "dockerfile": "FROM jboss/keycloak:latest\nADD changeDatabase.xsl /opt/jboss/keycloak/\nRUN java -jar /usr/share/java/saxon.jar -s:/opt/jboss/keycloak/standalone/configuration/standalone.xml -xsl:/opt/jboss/keycloak/changeDatabase.xsl -o:/opt/jboss/keycloak/standalone/configuration/standalone.xml; java -jar /usr/share/java/saxon.jar -s:/opt/jboss/keycloak/standalone/configuration/standalone-ha.xml -xsl:/opt/jboss/keycloak/changeDatabase.xsl -o:/opt/jboss/keycloak/standalone/configuration/standalone-ha.xml; rm /opt/jboss/keycloak/changeDatabase.xsl\nRUN mkdir -p /opt/jboss/keycloak/modules/system/layers/base/org/postgresql/jdbc/main; cd /opt/jboss/keycloak/modules/system/layers/base/org/postgresql/jdbc/main; curl -O http://central.maven.org/maven2/org/postgresql/postgresql/9.3-1102-jdbc3/postgresql-9.3-1102-jdbc3.jar\nADD module.xml /opt/jboss/keycloak/modules/system/layers/base/org/postgresql/jdbc/main/\nFROM jboss/keycloak-postgres:latest\nUSER root\nRUN mkdir -p /opt/jboss/keycloak/standalone/log\nRUN mkdir -p /opt/jboss/keycloak/standalone/data\nRUN chown -R jboss:0 /opt/jboss/keycloak/standalone\n RUN chmod -R g+rw /opt/jboss/keycloak/standalone\nUSER jboss\n"
         },
         "strategy": {
           "type": "Docker",
           "dockerStrategy": {
             "dockerfilePath":""
           }
-        },
+        }, 
         "output": {
           "to": {
             "kind": "ImageStreamTag",
@@ -215,7 +232,7 @@
             "containers": [
               {
                 "name": "keycloak-server",
-                "image": "${NAMESPACE}/keycloak-openshift-fixed",
+                "image": "myproject/keycloak-openshift-fixed:latest",
                 "ports": [
                   {
                     "name": "8080-tcp",
@@ -236,14 +253,14 @@
                       "/bin/sh",
                       "-i",
                       "-c",
-                      "wget http://localhost:8080/auth"
+                      "curl localhost:8080/auth"
                     ]
                   }
                 },
                 "env": [
                   {
                     "name": "POSTGRES_PORT_5432_TCP_ADDR",
-                    "value": "keycloak-mysql"
+                    "value": "postgresql"
                   },
                   {
                     "name": "POSTGRES_PORT_5432_TCP_PORT",
@@ -255,11 +272,29 @@
                   },
                   {
                     "name": "POSTGRES_USER",
-                    "value": "${POSTGRESQL_DATABASE}"
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "${DATABASE_SERVICE_NAME}",
+                        "key": "database-user"
+                      }
+                    }
+                  },
+                  {
+                      "name":"KEYCLOAK_USER",
+                      "value":"${KEYCLOAK_USER}"
+                  },
+                  {
+                      "name":"KEYCLOAK_PASSWORD",
+                      "value":"${KEYCLOAK_PASSWORD}"
                   },
                   {
                     "name": "POSTGRES_PASSWORD",
-                    "value": "${POSTGRESQL_PASSWORD}"
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "${DATABASE_SERVICE_NAME}",
+                        "key": "database-password"
+                      }
+                    }
                   }
                 ],
                 "resources": {
