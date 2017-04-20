@@ -28,7 +28,7 @@
       "name": "KEYCLOAK_USER",
       "displayName": "Keycloak Admin Username",
       "description": "This is the username for the admin user of the keycloak application.",
-      "value": "password",
+      "value": "admin",
       "required": true
     },
     {
